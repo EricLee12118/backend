@@ -3,16 +3,18 @@ import socket
 import json
 import threading
 import time
-from game import WerewolfGame
-from models import Player
-from events import DayEvent, NightEvent
+import sys
+from server import game
+from server import models
+from server import events
+
 
 class GameServer:
     def __init__(self, host='localhost', port=5000):
         self.server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server.bind((host, port))
         self.server.listen(2)  
-        self.game = WerewolfGame()
+        self.game = events.WerewolfGame()
         self.players = []
         self.client_sockets = []
         self.vote_lock = threading.Lock()
@@ -32,8 +34,8 @@ class GameServer:
         player1_name = self.receive_message(0)["name"]
         player2_name = self.receive_message(1)["name"]
     
-        player1 = Player(player1_name)
-        player2 = Player(player2_name)
+        player1 = models.Player(player1_name)
+        player2 = models.Player(player2_name)
         self.players = [player1, player2]
         
         self.broadcast_message({"type": "wait_confirm", "players": [player1_name, player2_name]})
@@ -46,15 +48,15 @@ class GameServer:
             self.game.add_player(player2)
             
             for i in range(6):  
-                self.game.add_player(Player(f"AI玩家{i+1}"))
+                self.game.add_player(models.Player(f"AI玩家{i+1}"))
                 
             self.game.random_allocate()
             
             self.send_game_status()
             
             self.game.events = [
-                NightEvent("黑夜", "狼人行动"),
-                DayEvent("白天", "讨论和投票"),
+                events.NightEvent("黑夜", "狼人行动"),
+                events.DayEvent("白天", "讨论和投票"),
             ]
             
             self.run_game()
@@ -84,14 +86,14 @@ class GameServer:
 
         while True:
             for event in self.game.events:
-                if isinstance(event, NightEvent):
+                if isinstance(event, events.NightEvent):
                     self.handle_night_phase()
                 if not self.game.sheriff and not self.game.sheriff_elect:
                     self.handle_sheriff_election()
                     self.game.sheriff_elect = True
                 if not self.game.sheriff and self.game.sheriff_elect:
                     self.game.transfer_sheriff()
-                elif isinstance(event, DayEvent):
+                elif isinstance(event, events.DayEvent):
                     self.handle_day_phase()
                 
                 time.sleep(1)

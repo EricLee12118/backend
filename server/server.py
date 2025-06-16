@@ -21,7 +21,7 @@ class GameServer:
     def start(self):
         print("等待玩家连接...")
 
-        num_real_players = 8  
+        num_real_players = 6
         num_ai_players = 0    
 
         self.client_sockets = []
@@ -31,13 +31,39 @@ class GameServer:
             self.client_sockets.append(client_socket)
 
         self.players = []
+        name_list = []
         for i in range(num_real_players):
-            player_name = self.receive_message(i)["name"]
-            self.players.append(Player(player_name))
+            if self.is_socket_alive(self.client_sockets[i]):
+                player_name = self.receive_message(i)["name"]
+                name_list.append(player_name)
+                self.players.append(Player(player_name))
+            else:
+                name_list.append("")
+                print(f"玩家 {i+1} 已断开连接")
 
-        self.broadcast_message({"type": "wait_confirm", "players": [player.name for player in self.players]})
+        broadcast_names = []
 
-        confirmations = [self.receive_message(i)["confirm"] for i in range(num_real_players)]
+        for i, sock in enumerate(self.client_sockets):
+            if self.is_socket_alive(sock) is not True:
+                print(f"玩家 {i+1} 已断开连接")
+                continue
+            broadcast_names.append(name_list[i])
+
+        self.broadcast_message({"type": "wait_confirm", "players": broadcast_names})
+
+        confirmations = []
+        alive_players = []
+        for i, sc in enumerate(self.client_sockets):
+            if self.is_socket_alive(sc) and name_list[i] != "":
+                message = self.receive_message(i)
+                confirmations.append(message["confirm"])
+                alive_players.append(Player(name_list[i]))
+            else:
+                print(f"玩家 {i+1} 已断开连接")
+
+        self.players = alive_players
+
+        self.close_useless_sockets()
 
         if all(confirmations):
             for player in self.players:
@@ -61,11 +87,14 @@ class GameServer:
             self.broadcast_message({"type": "game_cancelled"})
 
     def broadcast_message(self, message):
-        for sc in self.client_sockets:
+        for i, sc in enumerate(self.client_sockets):
             try:
                 sc.send(json.dumps(message).encode())
-            except:
-                print("发送消息失败")
+            except (ConnectionResetError, OSError) as e:
+                print(f"玩家 {i+1} 已断开连接")
+            except Exception as e:
+                print(f"未知错误:{e}")
+
                 
     def send_game_status(self):
         for i, player in enumerate(self.players):
@@ -282,6 +311,9 @@ class GameServer:
                         target_name = response["target"]
                         self.game.human_wolf_votes[target_name] += 1
                         print(f"狼人 {player.name} (真人) 选择击杀 {target_name}")
+                        for player in self.game.players:
+                            if player.name == target_name:
+                                player.alive = False
 
             elif role_type == "witch":
                 dead_players = [p.name for p in self.game.players if not p.alive]
@@ -365,7 +397,31 @@ class GameServer:
         except Exception as e:
             print(f"接收消息失败: {e}")
             return {}
-        
+
+    def is_socket_alive(self, sock):
+        try:
+            sock.send(b"")
+            return True
+        except (ConnectionResetError, OSError):
+            return False
+
+    def close_useless_sockets(self):
+        dead_indices = []
+        for i, sock in enumerate(self.client_sockets):
+            if not self.is_socket_alive(sock):
+                dead_indices.append(i)
+
+        # 从后往前删除，避免索引错乱
+        for i in reversed(dead_indices):
+            self._remove_socket(i)
+
+    def _remove_socket(self, index):
+        """安全移除并关闭 socket"""
+        if 0 <= index < len(self.client_sockets):
+            dead_socket = self.client_sockets.pop(index)
+            dead_socket.close()  # 必须关闭！
+            print(f"已移除玩家 {index + 1} 的连接")
+
 if __name__ == "__main__":
     server = GameServer()
     server.start()
