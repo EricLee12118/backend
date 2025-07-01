@@ -21,7 +21,7 @@ class GameServer:
     def start(self):
         print("等待玩家连接...")
 
-        num_real_players = 6
+        num_real_players = 5
         num_ai_players = 0    
 
         self.client_sockets = []
@@ -106,7 +106,20 @@ class GameServer:
                 "day_count": self.game.day_count
             }
             self.send_message(status, i)
-            
+
+    def broadcast_night_result(self):
+        dead_players = []
+        for player in self.players:
+            if player.alive is not True:
+                dead_players.append(player.name)
+        for i, player in enumerate(self.players):
+            result = {
+                "type": "night_result",
+                "players": dead_players,
+            }
+            print(i)
+            self.send_message(result, i)
+
     def run_game(self):
         print("=== 狼人杀游戏开始 ===")
 
@@ -114,6 +127,8 @@ class GameServer:
             for event in self.game.events:
                 if isinstance(event, NightEvent):
                     self.handle_night_phase()
+                    print("Broadcasting night result")
+                    self.broadcast_night_result()
                 if not self.game.sheriff and not self.game.sheriff_elect:
                     self.handle_sheriff_election()
                     self.game.sheriff_elect = True
@@ -259,7 +274,7 @@ class GameServer:
 
         process_wolves()      
         process_witches()     
-        process_seers()       
+        process_seers()
         # process_hunters()     
 
         self.game.night_actions()
@@ -385,8 +400,8 @@ class GameServer:
     def send_message(self, message, player_index):
         try:
             self.client_sockets[player_index].send(json.dumps(message).encode())
-        except:
-            print("发送消息失败")
+        except Exception as e:
+            print(f"发送消息失败: + {e}")
         
     def receive_message(self, player_index):
         try:

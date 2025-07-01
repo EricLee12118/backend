@@ -83,6 +83,7 @@ class GameClient:
                     target = input("请选择要击杀的玩家: ")
                     if target in message["candidates"]:
                         self.send_message({"target": target})
+                        print("操作完成！请等待其余玩家进行操作")
                         break
                     print("无效的选择，请重新输入")
 
@@ -131,6 +132,10 @@ class GameClient:
         elif message_type == "seer_result":
             print(f"\n=== 预言家查验结果 ===")
             print(f"玩家 {message['target']} 的身份是: {message['result']}")
+
+        elif message_type == "night_result":
+            print("\n=== 夜晚结束 ===")
+            print(f"昨晚死亡的玩家是:{message['players']}")
         
         return True
 
